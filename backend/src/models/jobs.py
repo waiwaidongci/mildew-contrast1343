@@ -50,3 +50,53 @@ class Delivery(Base):
     state: Mapped[str] = mapped_column(String(20))
     detail: Mapped[str] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(default=now)
+
+
+class MergeSession(Base):
+    """一次离线筛查合并：冻结参与库房与筛查参数，并保存发布后的总榜。"""
+    __tablename__ = 'merge_sessions'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    rooms: Mapped[list] = mapped_column(JSON)
+    params: Mapped[dict] = mapped_column(JSON)
+    state: Mapped[str] = mapped_column(String(20), default='awaiting', index=True)
+    ledger: Mapped[dict | None] = mapped_column(JSON)
+    author: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(default=now)
+    published_at: Mapped[datetime | None]
+
+
+class MergePackage(Base):
+    """库房当前已入账的计数包，每个库房只保留最新一个版本。"""
+    __tablename__ = 'merge_packages'
+    __table_args__ = (UniqueConstraint('session_id', 'room'), UniqueConstraint('session_id', 'checksum'))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey('merge_sessions.id'), index=True)
+    room: Mapped[str] = mapped_column(String(80))
+    reference: Mapped[str] = mapped_column(String(120))
+    version: Mapped[int]
+    state: Mapped[str] = mapped_column(String(20))  # accepted | superseded | returned
+    checksum: Mapped[str] = mapped_column(String(64))
+    positive_count: Mapped[int]
+    negative_count: Mapped[int]
+    pattern_hits: Mapped[dict] = mapped_column(JSON)
+    credentials: Mapped[list] = mapped_column(JSON)
+    note: Mapped[str | None] = mapped_column(String(500))
+    received_at: Mapped[datetime] = mapped_column(default=now)
+
+
+class MergeAttempt(Base):
+    """每个到达的分包都留痕，用于识别重试、迟到和退回换包。"""
+    __tablename__ = 'merge_attempts'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey('merge_sessions.id'), index=True)
+    room: Mapped[str] = mapped_column(String(80))
+    reference: Mapped[str] = mapped_column(String(120))
+    version: Mapped[int]
+    checksum: Mapped[str] = mapped_column(String(64))
+    outcome: Mapped[str] = mapped_column(String(20))  # accepted | duplicate | stale | replaced | rejected
+    detail: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(default=now)

@@ -8,19 +8,19 @@ from itertools import combinations
 from .spec import SPEC
 
 
-_CONDITION_LABELS = {
+CONDITION_LABELS = {
     "high_humidity": ("低于高湿切分点", "高湿"),
     "vent_blocked": ("风口未遮挡", "风口遮挡"),
     "maintenance_pending": ("无待结报修", "设施报修待结"),
 }
-_FIELDS = SPEC["fields"]
-_PATTERN_COLUMNS = (
+PATTERN_COLUMNS = (
     ("pattern_id", "模式编号"), ("conditions", "伴随条件"), ("size", "条件数"),
     ("positive_count", "正组命中"), ("negative_count", "负组命中"),
     ("positive_support", "正组原始支持度"), ("negative_support", "负组原始支持度"),
     ("positive_smoothed", "正组平滑支持度"), ("negative_smoothed", "负组平滑支持度"),
     ("growth", "增长倍数"),
 )
+_FIELDS = SPEC["fields"]
 _EVIDENCE_COLUMNS = (("pattern_ids", "命中模式编号"),) + tuple(
     (field["key"], field["label"]) for field in _FIELDS
 )
@@ -71,7 +71,7 @@ def validate_rows(rows):
     return validated
 
 
-def _row_patterns(row, humidity_threshold):
+def row_patterns(row, humidity_threshold):
     conditions = (
         ("high_humidity", row["humidity"] >= humidity_threshold),
         ("vent_blocked", row["vent_blocked"]),
@@ -80,7 +80,17 @@ def _row_patterns(row, humidity_threshold):
     return tuple((condition,) for condition in conditions) + tuple(combinations(conditions, 2))
 
 
-def _score_patterns(hits, positives, negatives, params):
+def pattern_key(pattern):
+    """把条件元组编码成离线库房可以稳定复算的模式键。"""
+    return "+".join(f"{field}:{'true' if value else 'false'}" for field, value in pattern)
+
+
+def condition_text(pattern):
+    return "且".join(CONDITION_LABELS[field][value] for field, value in pattern)
+
+
+def score_patterns(hits, positives, negatives, params):
+    """按原始支持度、平滑支持度和增长倍数筛选并排序，供单批分析与分包合并共用。"""
     alpha = Fraction(str(params["smoothing"]))
     minimum_growth = Fraction(str(params["min_growth"]))
     eligible = []
@@ -118,19 +128,19 @@ def analyze(rows, normalized_params):
         hits = defaultdict(Counter)
         patterns_by_id = {}
         for row in records:
-            matching = _row_patterns(row, threshold)
+            matching = row_patterns(row, threshold)
             patterns_by_id[row["inspection_id"]] = matching
             for pattern in matching:
                 hits[pattern][row["mildew_observed"]] += 1
 
         pattern_ids = {}
-        for rank, score in enumerate(_score_patterns(hits, positives, negatives, params), start=1):
+        for rank, score in enumerate(score_patterns(hits, positives, negatives, params), start=1):
             pattern, growth, positive, negative, positive_smoothed, negative_smoothed = score
             pattern_id = f"P{rank:02d}"
             pattern_ids[pattern] = pattern_id
             patterns.append({
                 "pattern_id": pattern_id,
-                "conditions": "且".join(_CONDITION_LABELS[field][value] for field, value in pattern),
+                "conditions": "且".join(CONDITION_LABELS[field][value] for field, value in pattern),
                 "size": len(pattern),
                 "positive_count": positive,
                 "negative_count": negative,
@@ -170,7 +180,7 @@ def analyze(rows, normalized_params):
             {"label": "命中巡检", "value": len(evidence), "detail": "至少符合一个入选模式，按巡检单号计数"},
         ],
         "tables": [
-            _table("伴随模式排名", _PATTERN_COLUMNS, patterns),
+            _table("伴随模式排名", PATTERN_COLUMNS, patterns),
             _table("巡检证据明细", _EVIDENCE_COLUMNS, evidence),
         ],
         "charts": [{"title": "增长倍数最高的模式", "kind": "bar", "series": [

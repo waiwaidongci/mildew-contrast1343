@@ -28,3 +28,23 @@ class ScheduleRequest(RunRequest):
     recipient: str = Field(min_length=1, max_length=100)
     first_at: datetime
     repeat_daily: bool = False
+
+class MergeRequest(Request):
+    name: str = Field(min_length=1, max_length=120)
+    rooms: list[str] = Field(min_length=1, max_length=50)
+    params: dict = Field(default_factory=dict)
+
+class MergePackageRequest(Request):
+    room: str = Field(min_length=1, max_length=80)
+    version: int = Field(ge=1, le=1_000_000)
+    reference: str = Field(min_length=1, max_length=120)
+    positive_count: int = Field(ge=0, le=5000)
+    negative_count: int = Field(ge=0, le=5000)
+    pattern_hits: dict[str, dict] = Field(default_factory=dict)
+    credentials: list[str] = Field(default_factory=list, max_length=5000)
+    params: dict | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+class MergeReturnRequest(Request):
+    room: str = Field(min_length=1, max_length=80)
+    note: str = Field(min_length=1, max_length=500)

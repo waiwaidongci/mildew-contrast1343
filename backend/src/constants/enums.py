@@ -15,3 +15,9 @@ class Review(StrEnum):
     PENDING = 'pending'
     ACCEPTED = 'accepted'
     RETURNED = 'returned'
+
+class MergeState(StrEnum):
+    AWAITING = 'awaiting'
+    CONFLICT = 'conflict'
+    READY = 'ready'
+    PUBLISHED = 'published'
